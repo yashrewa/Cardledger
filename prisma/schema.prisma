@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Card {
+  id              String   @id @default(cuid())
+  name            String
+  bankName        String
+  billingStartDay Int      @default(11)
+  billingEndDay   Int      @default(11)
+  createdAt       DateTime @default(now())
+
+  cycles       BillingCycle[]
+  transactions Transaction[]
+}
+
+model BillingCycle {
+  id        String      @id @default(cuid())
+  cardId    String
+  startDate DateTime
+  endDate   DateTime
+  status    CycleStatus @default(OPEN)
+  createdAt DateTime    @default(now())
+
+  card         Card          @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  payments     Payment[]
+
+  @@unique([cardId, startDate, endDate])
+}
+
+model Transaction {
+  id                 String          @id @default(cuid())
+  cardId             String
+  billingCycleId     String
+  date               DateTime
+  merchantRaw        String
+  merchantNormalized String
+  category           String?
+  amount             Int
+  type               TransactionType @default(EXPENSE)
+  rawText            String?
+  expression         String?
+  isExcluded         Boolean         @default(false)
+  note               String?
+  createdAt          DateTime        @default(now())
+
+  card         Card         @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  billingCycle BillingCycle @relation(fields: [billingCycleId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id             String   @id @default(cuid())
+  billingCycleId String
+  amount         Int
+  paidDate       DateTime
+  note           String?
+  createdAt      DateTime @default(now())
+
+  billingCycle BillingCycle @relation(fields: [billingCycleId], references: [id], onDelete: Cascade)
+}
+
+enum CycleStatus {
+  OPEN
+  BILL_GENERATED
+  PAID
+}
+
+enum TransactionType {
+  EXPENSE
+  REFUND
+  PAYMENT
+  ADJUSTMENT
+}
