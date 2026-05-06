@@ -18,3 +18,7 @@ export function getBillingCycleForDate(date: Date, billingStartDay = 11): CycleR
 export function formatCycleLabel(startDate: Date, endDate: Date) {
   return `${startDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} - ${endDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`;
 }
+
+export function formatCycleNotesLabel(startDate: Date, endDate: Date) {
+  return `${startDate.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })} to ${endDate.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}`;
+}

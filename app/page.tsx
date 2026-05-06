@@ -3,10 +3,15 @@ import {
   calculateCycleTotal,
   isIncludedInCycleTotal,
 } from "@/app/lib/accounting";
-import { getBillingCycleForDate, formatCycleLabel } from "@/app/lib/cycles";
+import {
+  getBillingCycleForDate,
+  formatCycleLabel,
+  formatCycleNotesLabel,
+} from "@/app/lib/cycles";
 import QuickAddForm from "./quick-add-form";
 import DeleteTransactionButton from "./delete-transaction-button";
 import CycleSelector from "./cycle-selector";
+import CopyNotesButton from "./copy-notes-button";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +73,11 @@ async function getData(selectedCycleId?: string) {
       return acc;
     }, {})
   ).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+  const notesExportText = formatAppleNotesCycleText(
+    cycle.startDate,
+    cycle.endDate,
+    includedTransactions
+  );
 
   return {
     card,
@@ -77,6 +87,7 @@ async function getData(selectedCycleId?: string) {
     pending,
     merchantTotals,
     countedTransactionCount: includedTransactions.length,
+    notesExportText,
     cycleOptions: cycles.map((item) => ({
       id: item.id,
       label: formatCycleLabel(item.startDate, item.endDate),
@@ -98,6 +109,7 @@ export default async function Home({
     pending,
     merchantTotals,
     countedTransactionCount,
+    notesExportText,
     cycleOptions,
   } = await getData(cycleId);
 
@@ -150,6 +162,21 @@ export default async function Home({
       </section>
 
       <QuickAddForm cardId={card.id} />
+
+      <section className="card notes-export">
+        <div>
+          <h2 style={{ margin: 0 }}>Apple Notes export</h2>
+          <p className="label" style={{ marginBottom: 0 }}>
+            Copy this cycle in your old one-line notes format.
+          </p>
+        </div>
+        <CopyNotesButton text={notesExportText} />
+        <textarea
+          className="textarea notes-export-text"
+          readOnly
+          value={notesExportText}
+        />
+      </section>
 
       <section className="card">
         <h2 style={{ marginTop: 0 }}>Transactions</h2>
@@ -245,4 +272,40 @@ export default async function Home({
       </section>
     </main>
   );
+}
+
+function formatAppleNotesCycleText(
+  startDate: Date,
+  endDate: Date,
+  transactions: Array<{
+    amount: number;
+    merchantRaw: string;
+    merchantNormalized: string;
+  }>
+) {
+  const entries = transactions
+    .slice()
+    .reverse()
+    .map((transaction) => {
+      const merchant =
+        transaction.merchantRaw.trim() || transaction.merchantNormalized;
+
+      return `${merchant}: ${Math.abs(transaction.amount)}`;
+    });
+
+  const expression = transactions
+    .slice()
+    .reverse()
+    .map((transaction) => String(transaction.amount))
+    .join("+");
+  const total = transactions.reduce(
+    (sum, transaction) => sum + transaction.amount,
+    0
+  );
+
+  return [
+    formatCycleNotesLabel(startDate, endDate),
+    ...entries,
+    `Total: ${expression || "0"} = ${total.toLocaleString("en-IN")}`,
+  ].join(" ");
 }

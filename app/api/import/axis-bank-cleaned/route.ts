@@ -7,6 +7,45 @@ function toDate(value: string) {
   return new Date(`${value}T00:00:00.000`);
 }
 
+export async function GET() {
+  const card = await prisma.card.findUnique({
+    where: { id: "axis-default" },
+    include: {
+      _count: {
+        select: {
+          cycles: true,
+          transactions: true,
+        },
+      },
+    },
+  });
+
+  const cycles = await prisma.billingCycle.findMany({
+    where: { cardId: "axis-default" },
+    orderBy: { startDate: "desc" },
+    take: 5,
+    include: {
+      _count: {
+        select: {
+          transactions: true,
+          payments: true,
+        },
+      },
+    },
+  });
+
+  return NextResponse.json({
+    card,
+    recentCycles: cycles.map((cycle) => ({
+      id: cycle.id,
+      startDate: cycle.startDate,
+      endDate: cycle.endDate,
+      transactions: cycle._count.transactions,
+      payments: cycle._count.payments,
+    })),
+  });
+}
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
 
@@ -46,7 +85,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await prisma.$transaction(async (tx) => {
     let cyclesCreated = 0;
     let cyclesUpdated = 0;
     let transactionsCreated = 0;
@@ -57,7 +95,7 @@ export async function POST(request: Request) {
       const startDate = toDate(cycleData.startDate);
       const endDate = toDate(cycleData.endDate);
 
-      const existingCycle = await tx.billingCycle.findFirst({
+      const existingCycle = await prisma.billingCycle.findFirst({
         where: {
           cardId: card.id,
           startDate,
@@ -71,11 +109,11 @@ export async function POST(request: Request) {
       }
 
       if (existingCycle && mode === "replace") {
-        await tx.transaction.deleteMany({
+        await prisma.transaction.deleteMany({
           where: { billingCycleId: existingCycle.id },
         });
 
-        await tx.payment.deleteMany({
+        await prisma.payment.deleteMany({
           where: { billingCycleId: existingCycle.id },
         });
 
@@ -84,7 +122,7 @@ export async function POST(request: Request) {
 
       const cycle =
         existingCycle ??
-        (await tx.billingCycle.create({
+        (await prisma.billingCycle.create({
           data: {
             cardId: card.id,
             startDate,
@@ -96,48 +134,52 @@ export async function POST(request: Request) {
         cyclesCreated += 1;
       }
 
-      for (const item of cycleData.entries) {
+      const transactionRows = cycleData.entries.map((item) => {
         const normalized = normalizeMerchant(item.merchantRaw);
 
-        await tx.transaction.create({
-          data: {
-            cardId: card.id,
-            billingCycleId: cycle.id,
-            date: startDate,
-            merchantRaw: item.merchantRaw,
-            merchantNormalized: normalized.merchantNormalized,
-            category: normalized.category,
-            amount: item.amount,
-            type: item.type,
-            isExcluded: item.isExcluded ?? false,
-            rawText: item.rawText,
-            expression: item.expression,
-            note: item.note,
-          },
+        return {
+          cardId: card.id,
+          billingCycleId: cycle.id,
+          date: startDate,
+          merchantRaw: item.merchantRaw,
+          merchantNormalized: normalized.merchantNormalized,
+          category: normalized.category,
+          amount: item.amount,
+          type: item.type,
+          isExcluded: item.isExcluded ?? false,
+          rawText: item.rawText,
+          expression: item.expression,
+          note: item.note,
+        };
+      });
+
+      if (transactionRows.length > 0) {
+        await prisma.transaction.createMany({
+          data: transactionRows,
         });
 
-        transactionsCreated += 1;
+        transactionsCreated += transactionRows.length;
       }
 
-      for (const payment of cycleData.payments ?? []) {
-        if (payment.amount === null) {
-          continue;
-        }
-
-        await tx.payment.create({
-          data: {
+      const paymentRows = (cycleData.payments ?? [])
+        .filter((payment) => payment.amount !== null)
+        .map((payment) => ({
             billingCycleId: cycle.id,
-            amount: payment.amount,
+            amount: payment.amount!,
             paidDate: endDate,
             note: payment.rawText,
-          },
+        }));
+
+      if (paymentRows.length > 0) {
+        await prisma.payment.createMany({
+          data: paymentRows,
         });
 
-        paymentsCreated += 1;
+        paymentsCreated += paymentRows.length;
       }
     }
 
-    return {
+    const result = {
       cyclesInDataset: axisBankCleanedCycles.length,
       cyclesCreated,
       cyclesUpdated,
@@ -145,10 +187,6 @@ export async function POST(request: Request) {
       transactionsCreated,
       paymentsCreated,
     };
-    }, {
-      maxWait: 20_000,
-      timeout: 60_000,
-    });
 
     return NextResponse.json(result);
   } catch (error) {
