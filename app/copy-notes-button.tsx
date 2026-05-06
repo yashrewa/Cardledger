@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 
 export default function CopyNotesButton({ text }: { text: string }) {
   const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function copy() {
@@ -18,17 +19,34 @@ export default function CopyNotesButton({ text }: { text: string }) {
   }
 
   return (
-    <div className="notes-copy">
-      <button
-        className="btn secondary"
-        disabled={isPending || !text}
-        onClick={copy}
-        type="button"
-      >
-        {isPending ? "Copying..." : "Copy for Apple Notes"}
-      </button>
-      {status === "copied" && <span className="good">Copied</span>}
-      {status === "failed" && <span className="bad">Copy failed</span>}
+    <div className="notes-export">
+      <div className="notes-copy">
+        <button
+          className="btn secondary"
+          disabled={isPending || !text}
+          onClick={copy}
+          type="button"
+        >
+          {isPending ? "Copying..." : "Copy for Apple Notes"}
+        </button>
+        <button
+          className="btn secondary"
+          onClick={() => setIsPreviewOpen((value) => !value)}
+          type="button"
+        >
+          {isPreviewOpen ? "Hide preview" : "Preview"}
+        </button>
+        {status === "copied" && <span className="good">Copied</span>}
+        {status === "failed" && <span className="bad">Copy failed</span>}
+      </div>
+
+      {isPreviewOpen && (
+        <textarea
+          className="textarea notes-export-text"
+          readOnly
+          value={text}
+        />
+      )}
     </div>
   );
 }

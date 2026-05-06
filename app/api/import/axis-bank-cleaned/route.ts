@@ -4,7 +4,9 @@ import { normalizeMerchant } from "@/app/lib/parser";
 import { axisBankCleanedCycles } from "@/app/data/axis-bank-cleaned";
 
 function toDate(value: string) {
-  return new Date(`${value}T00:00:00.000`);
+  const [year, month, day] = value.split("-").map(Number);
+
+  return new Date(Date.UTC(year, month - 1, day));
 }
 
 export async function GET() {

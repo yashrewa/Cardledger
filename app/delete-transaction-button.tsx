@@ -35,7 +35,7 @@ export default function DeleteTransactionButton({
   }
 
   return (
-    <div className="action-cell">
+    <>
       <button
         className="btn danger compact"
         disabled={isPending}
@@ -45,6 +45,6 @@ export default function DeleteTransactionButton({
         {isPending ? "Deleting..." : "Delete"}
       </button>
       {error && <div className="bad action-error">{error}</div>}
-    </div>
+    </>
   );
 }
