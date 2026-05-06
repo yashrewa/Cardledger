@@ -6,10 +6,11 @@ import {
 import { getBillingCycleForDate, formatCycleLabel } from "@/app/lib/cycles";
 import QuickAddForm from "./quick-add-form";
 import DeleteTransactionButton from "./delete-transaction-button";
+import CycleSelector from "./cycle-selector";
 
 export const dynamic = "force-dynamic";
 
-async function getData() {
+async function getData(selectedCycleId?: string) {
   const card = await prisma.card.upsert({
     where: { id: "axis-default" },
     update: {},
@@ -22,21 +23,34 @@ async function getData() {
     },
   });
 
-  const range = getBillingCycleForDate(new Date(), card.billingStartDay);
-  const cycle = await prisma.billingCycle.upsert({
+  const currentRange = getBillingCycleForDate(new Date(), card.billingStartDay);
+  const currentCycle = await prisma.billingCycle.upsert({
     where: {
       cardId_startDate_endDate: {
         cardId: card.id,
-        startDate: range.startDate,
-        endDate: range.endDate,
+        startDate: currentRange.startDate,
+        endDate: currentRange.endDate,
       },
     },
     update: {},
     create: {
       cardId: card.id,
-      startDate: range.startDate,
-      endDate: range.endDate,
+      startDate: currentRange.startDate,
+      endDate: currentRange.endDate,
     },
+  });
+
+  const cycles = await prisma.billingCycle.findMany({
+    where: { cardId: card.id },
+    orderBy: { startDate: "desc" },
+  });
+
+  const cycleId = selectedCycleId
+    ? cycles.find((item) => item.id === selectedCycleId)?.id
+    : currentCycle.id;
+
+  const cycle = await prisma.billingCycle.findUniqueOrThrow({
+    where: { id: cycleId ?? currentCycle.id },
     include: {
       transactions: { orderBy: [{ date: "desc" }, { createdAt: "desc" }] },
       payments: true,
@@ -63,10 +77,19 @@ async function getData() {
     pending,
     merchantTotals,
     countedTransactionCount: includedTransactions.length,
+    cycleOptions: cycles.map((item) => ({
+      id: item.id,
+      label: formatCycleLabel(item.startDate, item.endDate),
+    })),
   };
 }
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ cycleId?: string }>;
+}) {
+  const { cycleId } = await searchParams;
   const {
     card,
     cycle,
@@ -75,7 +98,8 @@ export default async function Home() {
     pending,
     merchantTotals,
     countedTransactionCount,
-  } = await getData();
+    cycleOptions,
+  } = await getData(cycleId);
 
   return (
     <main className="container grid">
@@ -90,8 +114,14 @@ export default async function Home() {
           <div className="value" style={{ fontSize: 22 }}>{card.name}</div>
         </div>
         <div className="card">
-          <div className="label">Current cycle</div>
+          <div className="label">Billing cycle</div>
           <div className="value" style={{ fontSize: 22 }}>{formatCycleLabel(cycle.startDate, cycle.endDate)}</div>
+          <div style={{ marginTop: 12 }}>
+            <CycleSelector
+              cycles={cycleOptions}
+              selectedCycleId={cycle.id}
+            />
+          </div>
         </div>
         <div className="card">
           <div className="label">Pending</div>
